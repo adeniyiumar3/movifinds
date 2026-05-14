@@ -3,6 +3,4 @@
 
 flask                        # web server
 pandas                       # CSV loading and data processing
-sentence-transformers        # local embedding model (~90MB download once)
-chromadb                     # local vector database
-scikit-learn                 # used internally by sentence-transformers
+scikit-learn                 # TF-IDF vectorization and similarity

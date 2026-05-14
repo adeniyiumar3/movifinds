@@ -4,10 +4,9 @@
 # What this file does:
 # 1. Loads your CSV movie dataset
 # 2. Extracts genres, languages, countries dynamically
-# 3. Builds semantic embeddings using Sentence Transformers
-# 4. Stores embeddings in ChromaDB (local vector database)
-# 5. Searches by semantic similarity + hard filters
-# 6. Returns ranked results with confidence scores
+# 3. Builds a TF-IDF vector space for movie text
+# 4. Searches by cosine similarity + hard filters
+# 5. Returns ranked results with confidence scores
 #
 # No external API needed. Runs fully offline after setup.
 # ============================================================
@@ -16,9 +15,8 @@ import os
 import re
 import ast
 import pandas as pd
-import chromadb
-from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 
 # ── Constants — edit these to match your CSV column names ───
 # If your CSV has different column names, change them here.
@@ -33,15 +31,6 @@ COL_YEAR     = "release_date"    # release year or full date
 COL_RATING   = "vote_average"    # IMDb-style score
 COL_FORMAT   = "type"            # "movie" or "series" (optional)
 
-# Path where ChromaDB stores its local vector database files
-import os
-CHROMA_DIR   = "/tmp/chroma_db"
-COLLECTION   = "movifinds_movies"
-
-# Embedding model — runs locally, downloads once (~90MB)
-# "all-MiniLM-L6-v2" is fast and accurate for this use case
-EMBED_MODEL  = "all-MiniLM-L6-v2"
-
 
 class MovieRecommender:
     """
@@ -54,14 +43,14 @@ class MovieRecommender:
         self.df = self._load_dataset(dataset_path)
         print(f"✅ Loaded {len(self.df)} movies")
 
-        print("🧠 Loading embedding model (downloads once ~90MB)...")
-        self.model = SentenceTransformer(EMBED_MODEL)
-        print("✅ Embedding model ready")
-
-        print("🗄️  Setting up vector database...")
-        self.client     = chromadb.PersistentClient(path=CHROMA_DIR)
-        self.collection = self._setup_collection()
-        print("✅ Vector database ready")
+        print("🧠 Building TF-IDF matrix...")
+        self.vectorizer = TfidfVectorizer(
+            max_features=50000,
+            stop_words="english",
+            ngram_range=(1, 2)
+        )
+        self.tfidf_matrix = self.vectorizer.fit_transform(self.df["_combined_text"])
+        print(f"✅ TF-IDF matrix ready ({self.tfidf_matrix.shape[0]} movies)")
 
 
     # ── DATASET LOADING ──────────────────────────────────────
@@ -200,73 +189,6 @@ class MovieRecommender:
         return " ".join(parts)
 
 
-    # ── VECTOR DATABASE SETUP ────────────────────────────────
-    def _setup_collection(self):
-        """
-        Creates or loads the ChromaDB collection.
-        If movies are already embedded (from a previous run),
-        skips re-embedding — making restarts very fast.
-        """
-        try:
-            collection = self.client.get_collection(COLLECTION)
-            existing   = collection.count()
-            if existing >= len(self.df) * 0.9:
-                print(f"⚡ Using cached embeddings ({existing} movies)")
-                return collection
-            else:
-                print("🔄 Dataset changed — rebuilding embeddings...")
-                self.client.delete_collection(COLLECTION)
-        except Exception:
-            pass
-
-        # Create fresh collection
-        collection = self.client.create_collection(
-            name=COLLECTION,
-            metadata={"hnsw:space": "cosine"}   # cosine similarity
-        )
-
-        # Embed and store in batches (avoids memory issues)
-        batch_size = 100
-        total      = len(self.df)
-        print(f"⚙️  Embedding {total} movies (this runs once, then cached)...")
-
-        for start in range(0, total, batch_size):
-            end   = min(start + batch_size, total)
-            batch = self.df.iloc[start:end]
-
-            texts = batch["_combined_text"].tolist()
-            ids   = [str(i) for i in range(start, end)]
-
-            # Generate embeddings for this batch
-            embeddings = self.model.encode(texts, show_progress_bar=False).tolist()
-
-            # Build metadata for filtering later
-            metadatas = []
-            for _, row in batch.iterrows():
-                metadatas.append({
-                    "title":     str(row.get(COL_TITLE, "")),
-                    "year":      int(row.get("_year", 0)),
-                    "rating":    float(row.get("_rating", 0)),
-                    "genres":    "|".join(row.get("_genres_list", [])),
-                    "language":  str(row.get("_language", "")),
-                    "countries": "|".join(row.get("_countries_list", [])),
-                    "overview":  str(row.get(COL_OVERVIEW, ""))[:500],
-                })
-
-            collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadatas
-            )
-
-            pct = int((end / total) * 100)
-            print(f"   {pct}% — embedded {end}/{total} movies", end="\r")
-
-        print(f"\n✅ All {total} movies embedded and stored")
-        return collection
-
-
     # ── FILTER OPTIONS ───────────────────────────────────────
     def get_filter_options(self) -> dict:
         """
@@ -365,8 +287,8 @@ class MovieRecommender:
     def search(self, query: str, genres: list, language: str,
                country: str, top_k: int = 10) -> list:
         """
-        1. Embeds the query
-        2. Searches ChromaDB for similar movies
+        1. Converts the query to TF-IDF
+        2. Scores all movies by cosine similarity
         3. Applies genre / language / country hard filters
         4. Ranks by combined similarity + rating score
         5. Returns top_k results
@@ -376,34 +298,21 @@ class MovieRecommender:
         if not query.strip():
             query = "popular highly rated movie"
 
-        # Embed the query
-        query_embedding = self.model.encode([query])[0].tolist()
+        query_vector = self.vectorizer.transform([query])
+        similarities = linear_kernel(query_vector, self.tfidf_matrix).flatten()
 
-        # Fetch more than needed so filtering doesn't leave us with too few
-        fetch_k = min(top_k * 8, len(self.df))
+        fetch_k = min(top_k * 10, len(self.df))
+        top_indices = similarities.argsort()[::-1][:fetch_k]
 
-        # Search vector database
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=fetch_k,
-            include=["metadatas", "distances"]
-        )
-
-        metadatas = results["metadatas"][0]
-        distances = results["distances"][0]   # lower = more similar (cosine)
-
-        # Convert distance to similarity score 0-1
-        similarities = [max(0.0, 1.0 - d) for d in distances]
-
-        # Apply hard filters + score each result
         filtered = []
-        for meta, sim in zip(metadatas, similarities):
-            movie_genres    = meta.get("genres", "").split("|")
-            movie_language  = meta.get("language", "")
-            movie_countries = meta.get("countries", "").split("|")
-            movie_rating    = float(meta.get("rating", 0))
+        for idx in top_indices:
+            row = self.df.iloc[idx]
+            movie_genres    = row["_genres_list"]
+            movie_language  = str(row.get("_language", ""))
+            movie_countries = row["_countries_list"]
+            movie_rating    = float(row.get("_rating", 0))
+            sim             = float(similarities[idx])
 
-            # Genre filter — movie must contain AT LEAST ONE selected genre
             if genres:
                 genre_match = any(
                     g.lower() in [mg.lower() for mg in movie_genres]
@@ -412,11 +321,9 @@ class MovieRecommender:
                 if not genre_match:
                     continue
 
-            # Language filter — exact match if selected
             if language and language.lower() not in movie_language.lower():
                 continue
 
-            # Country filter — movie must be from that country
             if country:
                 country_match = any(
                     country.lower() in mc.lower()
@@ -425,7 +332,6 @@ class MovieRecommender:
                 if not country_match:
                     continue
 
-            # Genre overlap score — rewards movies matching MORE selected genres
             genre_overlap = 0
             if genres:
                 matched = sum(
@@ -434,11 +340,9 @@ class MovieRecommender:
                 )
                 genre_overlap = matched / len(genres)
 
-            # Combined score: 60% semantic + 30% genre overlap + 10% rating
             rating_norm   = min(movie_rating / 10.0, 1.0)
             combined_score = (0.60 * sim) + (0.30 * genre_overlap) + (0.10 * rating_norm)
 
-            # Confidence label
             if combined_score > 0.75:
                 confidence = "Excellent match"
             elif combined_score > 0.55:
@@ -449,27 +353,24 @@ class MovieRecommender:
                 confidence = "Possible match"
 
             filtered.append({
-                "title":       meta.get("title", "Unknown"),
-                "year":        meta.get("year", 0),
+                "title":       str(row.get(COL_TITLE, "Unknown")),
+                "year":        int(row.get("_year", 0)),
                 "score":       round(movie_rating, 1),
                 "genre":       ", ".join(movie_genres[:3]),
                 "country":     movie_countries[0] if movie_countries else "",
                 "language":    movie_language,
-                "description": meta.get("overview", ""),
+                "description": str(row.get(COL_OVERVIEW, ""))[:500],
                 "tags":        movie_genres[:4],
                 "similarity":  round(sim * 100, 1),
                 "confidence":  confidence,
                 "_sort_score": combined_score
             })
 
-        # Sort by combined score descending
         filtered.sort(key=lambda x: x["_sort_score"], reverse=True)
 
-        # Fallback: if filters removed everything, return top semantic matches
         if not filtered:
-            filtered = self._fallback_results(similarities, metadatas, top_k)
+            filtered = self._fallback_results(similarities, top_k)
 
-        # Add rank and clean up internal fields
         output = []
         for i, movie in enumerate(filtered[:top_k]):
             movie.pop("_sort_score", None)
@@ -483,12 +384,10 @@ class MovieRecommender:
     def find_similar(self, title: str, top_k: int = 5) -> list:
         """
         Finds movies most similar to a given title
-        by looking up its embedding and searching neighbours.
+        by using TF-IDF cosine similarity.
         """
-        # Find the movie in the dataset
         match = self.df[self.df[COL_TITLE].str.lower() == title.lower()]
         if match.empty:
-            # Try partial match
             match = self.df[self.df[COL_TITLE].str.lower().str.contains(
                 title.lower(), na=False
             )]
@@ -496,32 +395,26 @@ class MovieRecommender:
         if match.empty:
             return []
 
-        # Use the first match's combined text as the query
+        movie_idx = match.index[0]
         query_text = match.iloc[0]["_combined_text"]
-        query_emb  = self.model.encode([query_text])[0].tolist()
+        query_vector = self.vectorizer.transform([query_text])
+        similarities = linear_kernel(query_vector, self.tfidf_matrix).flatten()
 
-        results = self.collection.query(
-            query_embeddings=[query_emb],
-            n_results=top_k + 1,   # +1 because the movie itself will appear
-            include=["metadatas", "distances"]
-        )
+        top_indices = similarities.argsort()[::-1]
+        output = []
 
-        metadatas  = results["metadatas"][0]
-        distances  = results["distances"][0]
-        output     = []
-
-        for meta, dist in zip(metadatas, distances):
-            # Skip the movie itself
-            if meta.get("title", "").lower() == title.lower():
+        for idx in top_indices:
+            if idx == movie_idx:
                 continue
-            sim = max(0.0, 1.0 - dist)
+            row = self.df.iloc[idx]
+            sim = float(similarities[idx])
             output.append({
                 "rank":        len(output) + 1,
-                "title":       meta.get("title", ""),
-                "year":        meta.get("year", 0),
-                "score":       round(float(meta.get("rating", 0)), 1),
-                "genre":       meta.get("genres", "").replace("|", ", "),
-                "description": meta.get("overview", ""),
+                "title":       str(row.get(COL_TITLE, "")),
+                "year":        int(row.get("_year", 0)),
+                "score":       round(float(row.get("_rating", 0)), 1),
+                "genre":       ", ".join(row["_genres_list"][:4]),
+                "description": str(row.get(COL_OVERVIEW, ""))[:500],
                 "similarity":  round(sim * 100, 1),
                 "confidence":  "Similar movie"
             })
@@ -532,31 +425,28 @@ class MovieRecommender:
 
 
     # ── FALLBACK ─────────────────────────────────────────────
-    def _fallback_results(self, similarities, metadatas, top_k) -> list:
+    def _fallback_results(self, similarities, top_k) -> list:
         """
         When hard filters remove all results, return the
         top semantic matches regardless of filter constraints.
         """
-        combined = sorted(
-            zip(similarities, metadatas),
-            key=lambda x: x[0],
-            reverse=True
-        )[:top_k]
+        top_indices = similarities.argsort()[::-1][:top_k]
 
         output = []
-        for sim, meta in combined:
-            genres = meta.get("genres", "").split("|")
+        for idx in top_indices:
+            row = self.df.iloc[idx]
+            genres = row["_genres_list"]
             output.append({
-                "title":       meta.get("title", "Unknown"),
-                "year":        meta.get("year", 0),
-                "score":       round(float(meta.get("rating", 0)), 1),
+                "title":       str(row.get(COL_TITLE, "Unknown")),
+                "year":        int(row.get("_year", 0)),
+                "score":       round(float(row.get("_rating", 0)), 1),
                 "genre":       ", ".join(genres[:3]),
-                "country":     meta.get("countries", "").split("|")[0],
-                "language":    meta.get("language", ""),
-                "description": meta.get("overview", ""),
+                "country":     row["_countries_list"][0] if row["_countries_list"] else "",
+                "language":    str(row.get("_language", "")),
+                "description": str(row.get(COL_OVERVIEW, ""))[:500],
                 "tags":        genres[:4],
-                "similarity":  round(sim * 100, 1),
+                "similarity":  round(float(similarities[idx]) * 100, 1),
                 "confidence":  "Broad match — filters relaxed",
-                "_sort_score": sim
+                "_sort_score": float(similarities[idx])
             })
         return output
