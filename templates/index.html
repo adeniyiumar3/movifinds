@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MoviFinds movie Recommendations</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="mf">
+
+  <nav class="topnav">
+    <div class="nav-logo">Movi<span>Finds</span> <em class="ai-badge">LIVE</em></div>
+    <div class="nav-right">
+      <div class="nav-avatar" id="avatar" onclick="toggleAv()">UN
+        <div class="avatar-dd" id="av-dd">
+          <div>Profile</div>
+          <div onclick="location.href='/'">Sign out</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="page-body">
+
+    <div class="hero">
+    
+      <h1 class="hero-title">Set Your <span class="dim">Cinematic</span> Mood</h1>
+      <p class="hero-sub">Pick up to <strong>5 genres</strong>, a language and country — recommendations come from your local movie dataset instantly.</p>
+    </div>
+
+    <div id="filters-loading" class="filters-loading">
+      <div class="loading-spinner"></div>
+      <p>Loading filters from your movies...</p>
+    </div>
+
+    <div class="main-grid" id="main-grid" style="display:none">
+      <div class="left-col">
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon">🎬</div>
+              <div class="card-title">Genre <span class="max-note">(up to 5)</span></div>
+            </div>
+            <div class="counter" id="counter-genre">0/5</div>
+          </div>
+          <div class="chips" id="genre-chips" data-group="genre" data-max="5"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon">😌</div>
+              <div class="card-title">Mood / Feeling</div>
+            </div>
+            <div class="counter" id="counter-mood">0/2</div>
+          </div>
+          <div class="chips" data-group="mood" data-max="2">
+            <div class="chip" data-val="suspenseful">Suspenseful</div>
+            <div class="chip" data-val="feel-good">Feel-good</div>
+            <div class="chip" data-val="emotional">Emotional</div>
+            <div class="chip" data-val="mind-bending">Mind-bending</div>
+            <div class="chip" data-val="dark and gritty">Dark &amp; Gritty</div>
+            <div class="chip" data-val="light-hearted">Light-hearted</div>
+            <div class="chip" data-val="intense">Intense</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon">🍿</div>
+              <div class="card-title">Watching Situation</div>
+            </div>
+            <div class="counter" id="counter-situation">0/2</div>
+          </div>
+          <div class="chips" data-group="situation" data-max="2">
+            <div class="chip" data-val="date night">Date Night</div>
+            <div class="chip" data-val="solo late night">Solo Late Night</div>
+            <div class="chip" data-val="friends group">Friends Group</div>
+            <div class="chip" data-val="family night">Family Night</div>
+            <div class="chip" data-val="background watching">Background Watch</div>
+            <div class="chip" data-val="can't sleep">Can't Sleep</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">⚡</div><div class="card-title">Energy / Vibe</div></div>
+              <div class="counter" id="counter-energy">0/2</div>
+            </div>
+            <div class="chips" data-group="energy" data-max="2">
+              <div class="chip" data-val="fast-paced">Fast-paced</div>
+              <div class="chip" data-val="slow-burn">Slow-burn</div>
+              <div class="chip" data-val="thrilling">Thrilling</div>
+              <div class="chip" data-val="relaxing">Relaxing</div>
+              <div class="chip" data-val="thought-provoking">Thought-provoking</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">🎭</div><div class="card-title">Ending Type</div></div>
+              <div class="counter" id="counter-ending">0/2</div>
+            </div>
+            <div class="chips" data-group="ending" data-max="2">
+              <div class="chip" data-val="happy ending">Happy</div>
+              <div class="chip" data-val="dark ending">Dark</div>
+              <div class="chip" data-val="open ending">Open</div>
+              <div class="chip" data-val="twist ending">Twist</div>
+              <div class="chip" data-val="bittersweet ending">Bittersweet</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">🗣️</div><div class="card-title">Language</div></div>
+            </div>
+            <select class="region-select" id="language-select" onchange="updatePrompt()">
+              <option value="">Any Language</option>
+            </select>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">🌍</div><div class="card-title">Country</div></div>
+            </div>
+            <select class="region-select" id="country-select" onchange="updatePrompt()">
+              <option value="">Any Country</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">📺</div><div class="card-title">Format</div></div>
+            </div>
+            <div class="segment">
+              <button class="seg-btn sel" onclick="segClick(this)" data-val="movie">Movie</button>
+              <button class="seg-btn" onclick="segClick(this)" data-val="series">Series</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-left"><div class="card-icon">👥</div><div class="card-title">Audience</div></div>
+            </div>
+            <div class="radio-list">
+              <div class="radio-item" onclick="pickRadio(this,'Family-friendly')"><div class="radio-dot"><div class="radio-inner"></div></div><span class="radio-label">Family-friendly</span></div>
+              <div class="radio-item sel" onclick="pickRadio(this,'Teen & Young Adult')"><div class="radio-dot"><div class="radio-inner"></div></div><span class="radio-label">Teen &amp; Young Adult</span></div>
+              <div class="radio-item" onclick="pickRadio(this,'Adult / Mature')"><div class="radio-dot"><div class="radio-inner"></div></div><span class="radio-label">Adult / Mature</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left"><div class="card-icon">🌌</div><div class="card-title">World-building Level</div></div>
+          </div>
+          <div class="slider-labels"><span>Realistic</span><span>Mix</span><span>Fantasy</span></div>
+          <input type="range" min="0" max="100" value="45" id="world-slider" oninput="updateSlider(this.value)">
+          <div class="slider-quote" id="slider-quote">"Grounded with a hint of magic."</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left"><div class="card-icon">🔗</div><div class="card-title">Similar To</div></div>
+          </div>
+          <p class="card-hint">Type a movie title — we'll find movies with a similar feel for you.</p>
+          <input type="text" class="text-input" id="similar-input"
+            placeholder="e.g. Inception, Parasite..." oninput="updatePrompt()">
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-left"><div class="card-icon">✏️</div><div class="card-title">Describe What You Want</div></div>
+          </div>
+          <p class="card-hint">Free text — themes, emotions, anything. This powers the semantic search engine.</p>
+          <textarea class="custom-textarea" id="custom-input"
+            placeholder="e.g. A psychological thriller about memory loss with a shocking twist..."
+            oninput="updatePrompt()"></textarea>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-col">
+
+        <div class="prompt-card">
+          <div class="prompt-label"><span class="ai-dot"></span>Search Query — Live Preview</div>
+          <div class="prompt-text empty" id="prompt-preview">Select preferences above to see your search query...</div>
+          <div class="prompt-actions">
+            <button class="clear-btn" onclick="clearAll()">✕ Clear All</button>
+          </div>
+        </div>
+
+        <button class="cta-btn" id="cta-btn" onclick="getRecommendations()">
+          <span id="cta-text">Get Recommendations</span>
+          <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 3l6 6-6 6M3 9h12"/></svg>
+        </button>
+
+        <div class="stats-card">
+          <div class="stats-title">📊 Available Movies</div>
+          <div class="stats-grid">
+            <div class="stat-item"><div class="stat-num" id="stat-movies">—</div><div class="stat-label">Movies</div></div>
+            <div class="stat-item"><div class="stat-num" id="stat-genres">—</div><div class="stat-label">Genres</div></div>
+            <div class="stat-item"><div class="stat-num" id="stat-languages">—</div><div class="stat-label">Languages</div></div>
+            <div class="stat-item"><div class="stat-num" id="stat-countries">—</div><div class="stat-label">Countries</div></div>
+          </div>
+        </div>
+
+        <div class="pro-tip">
+          <div class="tip-visual">
+            <svg width="120" height="80" viewBox="0 0 120 80">
+              <defs><radialGradient id="rg" cx="50%" cy="60%" r="60%"><stop offset="0%" stop-color="#e05c2a" stop-opacity="0.22"/><stop offset="100%" stop-color="#080810" stop-opacity="0"/></radialGradient></defs>
+              <rect width="120" height="80" fill="url(#rg)"/>
+              <line x1="60" y1="52" x2="15" y2="12" stroke="#e05c2a" stroke-width="0.5" stroke-opacity="0.4"/>
+              <line x1="60" y1="52" x2="60" y2="3" stroke="#e05c2a" stroke-width="0.8" stroke-opacity="0.6"/>
+              <line x1="60" y1="52" x2="108" y2="12" stroke="#e05c2a" stroke-width="0.5" stroke-opacity="0.4"/>
+              <circle cx="60" cy="54" r="3.5" fill="#e05c2a" fill-opacity="0.75"/>
+            </svg>
+          </div>
+          <div class="tip-body">
+            <span class="tip-badge">PRO TIP</span>
+            <p class="tip-text">Use <strong>"Describe What You Want"</strong> with natural language — the semantic engine understands themes, moods, and emotions from your dataset.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="results-zone" id="results-zone">
+      <div class="results-divider">
+        <div class="rdline"></div>
+        <div class="rdlabel" id="results-label">Your results will appear here</div>
+        <div class="rdline"></div>
+      </div>
+      <div class="results-placeholder" id="results-placeholder">
+        <div class="ph-icon">🎬</div>
+        <div class="ph-title">No results yet</div>
+        <div class="ph-sub">Set your filters and hit "Get Recommendations" — results load instantly from your local dataset.</div>
+      </div>
+      <div class="shimmer-list" id="shimmer-list" style="display:none">
+        <div class="sh-row"></div><div class="sh-row"></div><div class="sh-row"></div>
+        <div class="sh-row"></div><div class="sh-row"></div>
+      </div>
+      <div id="results-list" style="display:none"></div>
+    </div>
+
+    <div class="footer">
+      <div class="footer-logo">MoviFinds</div>
+      <div class="footer-links"><a href="#">Terms</a><a href="#">Privacy</a><a href="#">Support</a></div>
+      <div class="footer-copy">© 2025 MoviFinds. All rights reserved.</div>
+    </div>
+
+  </div>
+</div>
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
