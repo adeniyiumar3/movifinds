@@ -3,8 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 .env
-chroma_db/
-data/
 *.csv
 .DS_Store
 *.egg-info/

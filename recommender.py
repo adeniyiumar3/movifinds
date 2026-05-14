@@ -34,7 +34,8 @@ COL_RATING   = "vote_average"    # IMDb-style score
 COL_FORMAT   = "type"            # "movie" or "series" (optional)
 
 # Path where ChromaDB stores its local vector database files
-CHROMA_DIR   = "./chroma_db"
+import os
+CHROMA_DIR   = "/tmp/chroma_db"
 COLLECTION   = "movifinds_movies"
 
 # Embedding model — runs locally, downloads once (~90MB)
