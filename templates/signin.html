@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MoviFinds Sign In</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="mf">
+  <nav class="topnav">
+    <div class="nav-logo">Movi<span>Finds</span> <em class="ai-badge">LIVE</em></div>
+  </nav>
+
+  <div class="page-body auth-page">
+    <div class="auth-card">
+      <div class="auth-label">Welcome </div>
+      <h1 class="auth-title">Sign in to MoviFinds</h1>
+      <p class="auth-copy">Discover movie and series recommendations tailored to your mood, genre, and viewing preferences.</p>
+      <button class="cta-btn auth-btn" onclick="location.href='/search'">Sign In</button>
+
+    </div>
+  </div>
+</div>
+<script>
+  function clearSignInState() {
+    localStorage.removeItem("moviFindsLastSearch");
+  }
+  window.addEventListener("DOMContentLoaded", clearSignInState);
+  window.addEventListener("pageshow", function(event) {
+    if (event.persisted) {
+      clearSignInState();
+    }
+  });
+</script>
+</body>
+</html>

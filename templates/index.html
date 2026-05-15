@@ -13,12 +13,7 @@
   <nav class="topnav">
     <div class="nav-logo">Movi<span>Finds</span> <em class="ai-badge">LIVE</em></div>
     <div class="nav-right">
-      <div class="nav-avatar" id="avatar" onclick="toggleAv()">UN
-        <div class="avatar-dd" id="av-dd">
-          <div>Profile</div>
-          <div onclick="location.href='/'">Sign out</div>
-        </div>
-      </div>
+      <button class="signout-btn" onclick="signOut()">Sign out</button>
     </div>
   </nav>
 
@@ -27,7 +22,7 @@
     <div class="hero">
     
       <h1 class="hero-title">Set Your <span class="dim">Cinematic</span> Mood</h1>
-      <p class="hero-sub">Pick up to <strong>5 genres</strong>, a language and country — recommendations come from your local movie dataset instantly.</p>
+      <p class="hero-sub">Pick up to <strong>5 genres</strong>, a language, year and other filters to get movie recommendations instantly.</p>
     </div>
 
     <div id="filters-loading" class="filters-loading">
@@ -89,35 +84,6 @@
         <div class="two-col">
           <div class="card">
             <div class="card-header">
-              <div class="card-header-left"><div class="card-icon">⚡</div><div class="card-title">Energy / Vibe</div></div>
-              <div class="counter" id="counter-energy">0/2</div>
-            </div>
-            <div class="chips" data-group="energy" data-max="2">
-              <div class="chip" data-val="fast-paced">Fast-paced</div>
-              <div class="chip" data-val="slow-burn">Slow-burn</div>
-              <div class="chip" data-val="thrilling">Thrilling</div>
-              <div class="chip" data-val="relaxing">Relaxing</div>
-              <div class="chip" data-val="thought-provoking">Thought-provoking</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <div class="card-header-left"><div class="card-icon">🎭</div><div class="card-title">Ending Type</div></div>
-              <div class="counter" id="counter-ending">0/2</div>
-            </div>
-            <div class="chips" data-group="ending" data-max="2">
-              <div class="chip" data-val="happy ending">Happy</div>
-              <div class="chip" data-val="dark ending">Dark</div>
-              <div class="chip" data-val="open ending">Open</div>
-              <div class="chip" data-val="twist ending">Twist</div>
-              <div class="chip" data-val="bittersweet ending">Bittersweet</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="two-col">
-          <div class="card">
-            <div class="card-header">
               <div class="card-header-left"><div class="card-icon">🗣️</div><div class="card-title">Language</div></div>
             </div>
             <select class="region-select" id="language-select" onchange="updatePrompt()">
@@ -126,10 +92,10 @@
           </div>
           <div class="card">
             <div class="card-header">
-              <div class="card-header-left"><div class="card-icon">🌍</div><div class="card-title">Country</div></div>
+              <div class="card-header-left"><div class="card-icon">📅</div><div class="card-title">Year</div></div>
             </div>
-            <select class="region-select" id="country-select" onchange="updatePrompt()">
-              <option value="">Any Country</option>
+            <select class="region-select" id="year-select" onchange="updatePrompt()">
+              <option value="">Any Year</option>
             </select>
           </div>
         </div>
@@ -154,15 +120,6 @@
               <div class="radio-item" onclick="pickRadio(this,'Adult / Mature')"><div class="radio-dot"><div class="radio-inner"></div></div><span class="radio-label">Adult / Mature</span></div>
             </div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-header-left"><div class="card-icon">🌌</div><div class="card-title">World-building Level</div></div>
-          </div>
-          <div class="slider-labels"><span>Realistic</span><span>Mix</span><span>Fantasy</span></div>
-          <input type="range" min="0" max="100" value="45" id="world-slider" oninput="updateSlider(this.value)">
-          <div class="slider-quote" id="slider-quote">"Grounded with a hint of magic."</div>
         </div>
 
         <div class="card">
@@ -197,7 +154,7 @@
           </div>
         </div>
 
-        <button class="cta-btn" id="cta-btn" onclick="getRecommendations()">
+        <button class="cta-btn" id="cta-btn" onclick="getRecommendations()" disabled>
           <span id="cta-text">Get Recommendations</span>
           <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 3l6 6-6 6M3 9h12"/></svg>
         </button>
@@ -208,7 +165,7 @@
             <div class="stat-item"><div class="stat-num" id="stat-movies">—</div><div class="stat-label">Movies</div></div>
             <div class="stat-item"><div class="stat-num" id="stat-genres">—</div><div class="stat-label">Genres</div></div>
             <div class="stat-item"><div class="stat-num" id="stat-languages">—</div><div class="stat-label">Languages</div></div>
-            <div class="stat-item"><div class="stat-num" id="stat-countries">—</div><div class="stat-label">Countries</div></div>
+            <div class="stat-item"><div class="stat-num" id="stat-countries">88</div><div class="stat-label">Countries</div></div>
           </div>
         </div>
 
@@ -225,36 +182,16 @@
           </div>
           <div class="tip-body">
             <span class="tip-badge">PRO TIP</span>
-            <p class="tip-text">Use <strong>"Describe What You Want"</strong> with natural language — the semantic engine understands themes, moods, and emotions from your dataset.</p>
+            <p class="tip-text">Use <strong>"Describe What You Want"</strong> with natural language so recommendations will match your exact mood.</p>
           </div>
         </div>
 
       </div>
     </div>
 
-    <!-- RESULTS -->
-    <div class="results-zone" id="results-zone">
-      <div class="results-divider">
-        <div class="rdline"></div>
-        <div class="rdlabel" id="results-label">Your results will appear here</div>
-        <div class="rdline"></div>
-      </div>
-      <div class="results-placeholder" id="results-placeholder">
-        <div class="ph-icon">🎬</div>
-        <div class="ph-title">No results yet</div>
-        <div class="ph-sub">Set your filters and hit "Get Recommendations" — results load instantly from your local dataset.</div>
-      </div>
-      <div class="shimmer-list" id="shimmer-list" style="display:none">
-        <div class="sh-row"></div><div class="sh-row"></div><div class="sh-row"></div>
-        <div class="sh-row"></div><div class="sh-row"></div>
-      </div>
-      <div id="results-list" style="display:none"></div>
-    </div>
-
     <div class="footer">
       <div class="footer-logo">MoviFinds</div>
-      <div class="footer-links"><a href="#">Terms</a><a href="#">Privacy</a><a href="#">Support</a></div>
-      <div class="footer-copy">© 2025 MoviFinds. All rights reserved.</div>
+      <div class="footer-copy">© 2026 MoviFinds. All rights reserved.</div>
     </div>
 
   </div>

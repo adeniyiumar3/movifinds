@@ -2,7 +2,7 @@
 // main.js — MoviFinds LOCAL Frontend
 //
 // What this does:
-// 1. On page load: fetches genres/languages/countries from
+// 1. On page load: fetches genres/languages/years from
 //    the Flask backend (which reads them from your CSV)
 // 2. Dynamically builds the filter chips and dropdowns
 // 3. Tracks selections (max 5 genres, 2 for other categories)
@@ -16,13 +16,10 @@ const state = {
   genre:       [],      // up to 5
   mood:        [],      // up to 2
   situation:   [],      // up to 2
-  energy:      [],      // up to 2
-  ending:      [],      // up to 2
   language:    "",
-  country:     "",
+  year:        "",
   format:      "movie",
   audience:    "Teen & Young Adult",
-  worldSlider: 45,
   similarTo:   "",
   customText:  ""
 };
@@ -42,17 +39,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Populate language dropdown
     buildSelect("language-select", data.languages);
 
-    // Populate country dropdown
-    buildSelect("country-select", data.countries);
+    // Populate year-range dropdown
+    buildSelect("year-select", data.yearRanges);
 
     // Update dataset stats card
     document.getElementById("stat-genres").textContent    = data.genres.length;
     document.getElementById("stat-languages").textContent = data.languages.length;
-    document.getElementById("stat-countries").textContent = data.countries.length;
+    document.getElementById("stat-countries").textContent = 88;
     // Movie count comes from total (set by backend if available)
     if (data.total_movies) {
       document.getElementById("stat-movies").textContent = data.total_movies.toLocaleString();
     }
+
+    // Restore the last search state if available
+    loadSavedState();
+    updateCTAState();
 
     // Hide loading, show the grid
     document.getElementById("filters-loading").style.display = "none";
@@ -92,6 +93,107 @@ function buildSelect(elementId, options) {
     el.textContent = opt;
     select.appendChild(el);
   });
+
+  if (elementId === "year-select" && options.length > 0) {
+    const firstYearOption = select.options[1];
+    if (firstYearOption && firstYearOption.value.includes("-")) {
+      const startYear = firstYearOption.value.split("-")[0];
+      firstYearOption.textContent = `${startYear} till date`;
+    }
+  }
+}
+
+function saveSearchState() {
+  const payload = {
+    genre:        state.genre,
+    mood:         state.mood,
+    situation:    state.situation,
+    language:     state.language,
+    year:         state.year,
+    format:       state.format,
+    audience:     state.audience,
+    similar_to:   state.similarTo,
+    custom_text:  state.customText
+  };
+
+  const query = buildQueryText();
+  localStorage.setItem("moviFindsLastSearch", JSON.stringify({
+    payload,
+    query: query || "Movie search"
+  }));
+}
+
+function signOut() {
+  localStorage.removeItem("moviFindsLastSearch");
+  window.location.href = "/signin";
+}
+
+function loadSavedState() {
+  const raw = localStorage.getItem("moviFindsLastSearch");
+  if (!raw) return;
+
+  let saved;
+  try { saved = JSON.parse(raw); } catch (err) { return; }
+  if (!saved || !saved.payload) return;
+
+  const payload = saved.payload;
+  state.genre      = payload.genre || [];
+  state.mood       = payload.mood || [];
+  state.situation  = payload.situation || [];
+  state.language   = payload.language || "";
+  state.year       = payload.year || "";
+  state.format     = payload.format || "movie";
+  state.audience   = payload.audience || "Teen & Young Adult";
+  state.similarTo  = payload.similar_to || "";
+  state.customText = payload.custom_text || "";
+
+  document.querySelectorAll(".chips[data-group]").forEach(container => {
+    const group    = container.dataset.group;
+    const selected = state[group] || [];
+    const max      = parseInt(container.dataset.max) || 2;
+
+    container.querySelectorAll(".chip").forEach(chip => {
+      const val = chip.dataset.val;
+      if (selected.includes(val)) {
+        chip.classList.add("sel");
+      } else {
+        chip.classList.remove("sel");
+      }
+    });
+
+    container.querySelectorAll(".chip").forEach(chip => {
+      if (!chip.classList.contains("sel")) {
+        chip.classList.toggle("disabled", selected.length >= max);
+      }
+    });
+
+    const counter = document.getElementById("counter-" + group);
+    if (counter) {
+      counter.textContent = `${selected.length}/${max}`;
+      counter.classList.toggle("full", selected.length >= max);
+    }
+  });
+
+  const languageSelect = document.getElementById("language-select");
+  if (languageSelect) languageSelect.value = state.language;
+  const yearSelect = document.getElementById("year-select");
+  if (yearSelect) yearSelect.value = state.year;
+
+  document.querySelectorAll(".seg-btn").forEach(btn => {
+    btn.classList.toggle("sel", btn.dataset.val === state.format);
+  });
+
+  document.querySelectorAll(".radio-item").forEach(item => {
+    const label = item.querySelector(".radio-label")?.textContent.trim();
+    item.classList.toggle("sel", label === state.audience);
+  });
+
+  const similarInput = document.getElementById("similar-input");
+  if (similarInput) similarInput.value = state.similarTo;
+  const customInput = document.getElementById("custom-input");
+  if (customInput) customInput.value = state.customText;
+
+  updatePrompt();
 }
 
 
@@ -157,29 +259,13 @@ function pickRadio(el, val) {
 }
 
 
-// ── WORLD SLIDER ─────────────────────────────────────────────
-const sliderQuotes = [
-  "Grounded in reality — no fantasy elements.",
-  "Mostly realistic with a subtle magical touch.",
-  "A balanced mix of realism and fantasy.",
-  "Leans into fantasy with some real-world grounding.",
-  "Full fantasy and supernatural — anything goes."
-];
-function updateSlider(v) {
-  state.worldSlider = parseInt(v);
-  const i = Math.min(4, Math.floor(v / 21));
-  document.getElementById("slider-quote").textContent = `"${sliderQuotes[i]}"`;
-  updatePrompt();
-}
-
-
-// ── LANGUAGE / COUNTRY dropdowns ─────────────────────────────
+// ── LANGUAGE / YEAR dropdowns ─────────────────────────────
 document.getElementById("language-select").addEventListener("change", function() {
   state.language = this.value;
   updatePrompt();
 });
-document.getElementById("country-select").addEventListener("change", function() {
-  state.country = this.value;
+document.getElementById("year-select").addEventListener("change", function() {
+  state.year = this.value;
   updatePrompt();
 });
 
@@ -197,12 +283,13 @@ document.getElementById("custom-input").addEventListener("input", function() {
 
 // ── LIVE QUERY PREVIEW ───────────────────────────────────────
 function buildQueryText() {
-  const { genre, mood, situation, energy, ending,
-          language, country, format, audience,
-          worldSlider, similarTo, customText } = state;
+  const { genre, mood, situation,
+          language, year, format, audience,
+          similarTo, customText } = state;
 
   const hasSelection = genre.length || mood.length || situation.length ||
-                       energy.length || ending.length || similarTo || customText;
+                       language || year || similarTo || customText ||
+                       format !== "movie" || audience !== "Teen & Young Adult";
   if (!hasSelection) return null;
 
   const join = arr => arr.join(" and ");
@@ -211,21 +298,29 @@ function buildQueryText() {
   if (genre.length)     parts.push(`Genre: ${join(genre)}.`);
   if (mood.length)      parts.push(`Mood: ${join(mood)}.`);
   if (situation.length) parts.push(`For: ${join(situation)}.`);
-  if (energy.length)    parts.push(`Vibe: ${join(energy)}.`);
-  if (ending.length)    parts.push(`Ending: ${join(ending)}.`);
   if (language)         parts.push(`Language: ${language}.`);
-  if (country)          parts.push(`Country: ${country}.`);
+  if (year)             parts.push(`Release year: ${year}.`);
   if (format)           parts.push(`Format: ${format}.`);
   if (audience)         parts.push(`Audience: ${audience}.`);
-
-  const worldDesc = worldSlider < 30 ? "realistic" :
-                    worldSlider > 70 ? "fantasy/supernatural" : "mix of both";
-  parts.push(`World-building: ${worldDesc}.`);
 
   if (similarTo)    parts.push(`Similar to: "${similarTo}".`);
   if (customText.trim()) parts.push(customText.trim());
 
   return parts.join(" ");
+}
+
+function hasSelectedCriteria() {
+  const { genre, mood, situation, language, year,
+          similarTo, customText, format, audience } = state;
+  return genre.length || mood.length || situation.length ||
+         language || year || similarTo.trim() || customText.trim() ||
+         format !== "movie" || audience !== "Teen & Young Adult";
+}
+
+function updateCTAState() {
+  const btn = document.getElementById("cta-btn");
+  if (!btn) return;
+  btn.disabled = !hasSelectedCriteria();
 }
 
 function updatePrompt() {
@@ -238,6 +333,7 @@ function updatePrompt() {
     el.textContent = "Select preferences above to see your search query...";
     el.classList.add("empty");
   }
+  updateCTAState();
 }
 
 
@@ -249,83 +345,37 @@ function clearAll() {
     c.textContent = `0/${max}`;
     c.classList.remove("full");
   });
-  ["genre","mood","situation","energy","ending"].forEach(k => state[k] = []);
+  ["genre","mood","situation"].forEach(k => state[k] = []);
 
-  document.getElementById("world-slider").value    = 45;
-  document.getElementById("slider-quote").textContent = '"Grounded with a hint of magic."';
   document.getElementById("custom-input").value    = "";
   document.getElementById("similar-input").value   = "";
   document.getElementById("language-select").value = "";
-  document.getElementById("country-select").value  = "";
+  document.getElementById("year-select").value  = "";
 
-  state.worldSlider = 45;
   state.customText  = "";
   state.similarTo   = "";
   state.language    = "";
-  state.country     = "";
+  state.year       = "";
+  localStorage.removeItem("moviFindsLastSearch");
   updatePrompt();
+  updateCTAState();
 }
 
 
 // ── GET RECOMMENDATIONS ──────────────────────────────────────
-async function getRecommendations() {
-  const btn         = document.getElementById("cta-btn");
-  const btnText     = document.getElementById("cta-text");
-  const placeholder = document.getElementById("results-placeholder");
-  const shimmer     = document.getElementById("shimmer-list");
-  const resultsList = document.getElementById("results-list");
-  const label       = document.getElementById("results-label");
-
-  // Show loading
-  btn.disabled = true;
-  btnText.textContent = "Searching...";
-  placeholder.style.display = "none";
-  shimmer.style.display     = "flex";
-  shimmer.style.flexDirection = "column";
-  resultsList.style.display = "none";
-  resultsList.innerHTML     = "";
-  label.textContent = "Searching your dataset...";
-
-  document.getElementById("results-zone")
-    .scrollIntoView({ behavior: "smooth", block: "start" });
-
-  try {
-    const payload = {
-      genre:        state.genre,
-      mood:         state.mood,
-      situation:    state.situation,
-      energy:       state.energy,
-      ending:       state.ending,
-      language:     state.language,
-      country:      state.country,
-      format:       state.format,
-      audience:     state.audience,
-      world_slider: state.worldSlider,
-      similar_to:   state.similarTo,
-      custom_text:  state.customText
-    };
-
-    const res  = await fetch("/recommend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      label.textContent = `Top ${data.movies.length} results from your dataset`;
-      renderMovies(data.movies);
-    } else {
-      showError("Error: " + (data.error || "Unknown error"));
+function getRecommendations() {
+  if (!hasSelectedCriteria()) {
+    const el = document.getElementById("prompt-preview");
+    if (el) {
+      el.textContent = "Please choose at least one preference before getting recommendations.";
+      el.classList.remove("empty");
     }
-
-  } catch (err) {
-    showError("Cannot connect to server. Is app.py running?");
-  } finally {
-    btn.disabled = false;
-    btnText.textContent = "Get Recommendations";
-    shimmer.style.display = "none";
+    updateCTAState();
+    return;
   }
+
+  saveSearchState();
+  window.location.href = "/results";
 }
 
 
@@ -335,7 +385,7 @@ function renderMovies(movies) {
   list.innerHTML = "";
 
   if (!movies.length) {
-    list.innerHTML = `<div class="error-msg">No movies matched your filters. Try relaxing your language/country selection.</div>`;
+    list.innerHTML = `<div class="error-msg">No movies matched your filters. Try relaxing your language/year selection.</div>`;
     list.style.display = "block";
     return;
   }
@@ -384,13 +434,8 @@ function showError(msg) {
 }
 
 
-// ── AVATAR DROPDOWN ──────────────────────────────────────────
-function toggleAv() {
-  document.getElementById("av-dd").classList.toggle("open");
+// ── LOGOUT HANDLER ───────────────────────────────────────────
+function signOut() {
+  localStorage.removeItem("moviFindsLastSearch");
+  window.location.href = "/signin";
 }
-document.addEventListener("click", e => {
-  if (!e.target.closest("#avatar")) {
-    const dd = document.getElementById("av-dd");
-    if (dd) dd.classList.remove("open");
-  }
-});

@@ -4,7 +4,7 @@
 # No external AI API needed — fully offline capable.
 # ============================================================
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 from recommender import MovieRecommender
 import os
 
@@ -21,7 +21,25 @@ print("✅ Engine ready!")
 # ── Route: Home page ────────────────────────────────────────
 @app.route("/")
 def index():
+    return redirect("/signin")
+
+
+# ── Route: Sign-in page ─────────────────────────────────────
+@app.route("/signin")
+def signin():
+    return render_template("signin.html")
+
+
+# ── Route: Selection page ────────────────────────────────────
+@app.route("/search")
+def search():
     return render_template("index.html")
+
+
+# ── Route: Results page ─────────────────────────────────────
+@app.route("/results")
+def results():
+    return render_template("results.html")
 
 
 # ── Route: Get filter options from the dataset ───────────────
@@ -29,7 +47,7 @@ def index():
 @app.route("/filters", methods=["GET"])
 def get_filters():
     """
-    Returns all unique genres, languages, and countries
+    Returns all unique genres, languages, and years
     extracted directly from the dataset.
     Frontend uses this to build the filter UI dynamically.
     """
@@ -54,22 +72,19 @@ def recommend():
         # Extract user selections
         genres      = data.get("genre", [])        # list, up to 5
         language    = data.get("language", "")     # single string
-        country     = data.get("country", "")      # single string
+        year        = data.get("year", "")         # single string
         mood        = data.get("mood", [])
         situation   = data.get("situation", [])
-        energy      = data.get("energy", [])
-        ending      = data.get("ending", [])
         format_type = data.get("format", "movie")
         audience    = data.get("audience", "")
-        world_val   = int(data.get("world_slider", 50))
         custom_text = data.get("custom_text", "").strip()
         similar_to  = data.get("similar_to", "")  # for "similar movies" feature
 
         # Build the semantic query from all selections
         query = recommender.build_query(
             genres=genres, mood=mood, situation=situation,
-            energy=energy, ending=ending, format_type=format_type,
-            audience=audience, world_val=world_val,
+            format_type=format_type,
+            audience=audience, year=year,
             custom_text=custom_text, similar_to=similar_to
         )
 
@@ -78,7 +93,7 @@ def recommend():
             query=query,
             genres=genres,
             language=language,
-            country=country,
+            year=year,
             top_k=10
         )
 

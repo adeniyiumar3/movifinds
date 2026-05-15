@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MoviFinds Results</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="mf">
+  <nav class="topnav">
+    <div class="nav-logo">Movi<span>Finds</span> <em class="ai-badge">LIVE</em></div>
+    <div class="nav-right">
+      <button class="signout-btn" onclick="signOut()">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="page-body">
+    <div class="results-header">
+      <div>
+        <div class="results-title">Your Recommendations</div>
+        <div class="results-sub" id="query-preview">Loading your search...</div>
+      </div>
+      <button class="refine-btn" onclick="location.href='/search'">Refine Search</button>
+    </div>
+
+    <div id="results-loading" class="results-loading">
+      <div class="loading-spinner"></div>
+      <p>Finding your best matches...</p>
+    </div>
+
+    <div id="results-error" class="error-msg" style="display:none"></div>
+    <div id="results-list" class="results-list"></div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='results.js') }}"></script>
+</body>
+</html>

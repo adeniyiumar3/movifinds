@@ -3,7 +3,7 @@
 #
 # What this file does:
 # 1. Loads your CSV movie dataset
-# 2. Extracts genres, languages, countries dynamically
+# 2. Extracts genres, languages, years dynamically
 # 3. Builds a TF-IDF vector space for movie text
 # 4. Searches by cosine similarity + hard filters
 # 5. Returns ranked results with confidence scores
@@ -14,6 +14,7 @@
 import os
 import re
 import ast
+import datetime
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
@@ -150,6 +151,9 @@ class MovieRecommender:
             "ro": "Romanian", "uk": "Ukrainian", "bn": "Bengali",
             "ta": "Tamil",   "te": "Telugu",  "ml": "Malayalam",
             "yo": "Yoruba",  "ig": "Igbo",    "ha": "Hausa",
+            "af": "African", "cn": "Chinese", "el": "Greek",
+            "is": "Icelandic", "ky": "Kyrgyz", "nb": "Norwegian",
+            "ps": "Pashto", "sl": "Slovenian", "xx": "Others",
         }
         code = str(code).strip().lower()
         return lang_map.get(code, code.capitalize())
@@ -193,7 +197,7 @@ class MovieRecommender:
     def get_filter_options(self) -> dict:
         """
         Dynamically extracts all unique genres, languages,
-        and countries from the dataset.
+        and release years from the dataset.
         Frontend calls this on page load.
         """
         genres    = sorted(set(
@@ -202,22 +206,31 @@ class MovieRecommender:
         languages = sorted(set(
             l for l in self.df["_language"] if l and l != "nan"
         ))
-        countries = sorted(set(
-            c for sublist in self.df["_countries_list"] for c in sublist if c
-        ))
+
+        years = sorted({int(y) for y in self.df["_year"] if y and y > 0}, reverse=True)
+
+        current_year = datetime.date.today().year
+        earliest_year = min(years) if years else current_year
+        start_decade = (current_year // 10) * 10
+        end_decade = ((earliest_year // 10) * 10)
+        year_ranges = []
+
+        for decade in range(start_decade, end_decade - 1, -10):
+            year_ranges.append(f"{decade}-{decade + 9}")
 
         return {
-            "genres":    genres,
-            "languages": languages,
-            "countries": countries,
+            "genres":      genres,
+            "languages":   languages,
+            "yearRanges":  year_ranges,
             "total_movies": 5000
         }
 
 
     # ── QUERY BUILDER ────────────────────────────────────────
-    def build_query(self, genres, mood, situation, energy,
-                    ending, format_type, audience,
-                    world_val, custom_text, similar_to) -> str:
+    def build_query(self, genres, mood, situation,
+                    format_type, audience,
+                    year,
+                    custom_text, similar_to) -> str:
         """
         Converts all user selections into a rich natural-language
         query string that will be embedded and searched.
@@ -243,32 +256,14 @@ class MovieRecommender:
         if situation:
             parts.append(f"Good for {' or '.join(situation)}.")
 
-        energy_map = {
-            "fast-paced":        "fast-paced with lots of action",
-            "slow-burn":         "slow-burn with gradual tension",
-            "thrilling":         "thrilling throughout",
-            "relaxing":          "relaxing and easy to watch",
-            "thought-provoking": "makes you think deeply"
-        }
-        if energy:
-            energy_desc = " and ".join(energy_map.get(e, e) for e in energy)
-            parts.append(f"Pacing: {energy_desc}.")
-
-        if ending:
-            parts.append(f"I prefer a {' or '.join(ending)}.")
-
         if format_type:
             parts.append(f"Format: {format_type}.")
 
         if audience:
             parts.append(f"Suitable for {audience} viewers.")
 
-        if world_val < 30:
-            parts.append("Very realistic, no fantasy or supernatural elements.")
-        elif world_val > 70:
-            parts.append("Fantasy, supernatural, or sci-fi world-building.")
-        else:
-            parts.append("Mix of realistic and fantastical elements.")
+        if year:
+            parts.append(f"Release year: {year}.")
 
         if similar_to:
             parts.append(f"Similar to {similar_to}.")
@@ -285,11 +280,11 @@ class MovieRecommender:
 
     # ── MAIN SEARCH ──────────────────────────────────────────
     def search(self, query: str, genres: list, language: str,
-               country: str, top_k: int = 10) -> list:
+               year: str, top_k: int = 10) -> list:
         """
         1. Converts the query to TF-IDF
         2. Scores all movies by cosine similarity
-        3. Applies genre / language / country hard filters
+        3. Applies genre / language / year hard filters
         4. Ranks by combined similarity + rating score
         5. Returns top_k results
         """
@@ -324,13 +319,24 @@ class MovieRecommender:
             if language and language.lower() not in movie_language.lower():
                 continue
 
-            if country:
-                country_match = any(
-                    country.lower() in mc.lower()
-                    for mc in movie_countries
-                )
-                if not country_match:
-                    continue
+            if year:
+                year_text = str(year).strip()
+                movie_year = int(row.get("_year", 0))
+                if "-" in year_text:
+                    parts = [p.strip() for p in year_text.split("-")]
+                    try:
+                        start_year = int(parts[0])
+                        end_year = int(parts[1])
+                    except (ValueError, IndexError):
+                        continue
+                    if not (start_year <= movie_year <= end_year):
+                        continue
+                else:
+                    try:
+                        if movie_year != int(year_text):
+                            continue
+                    except ValueError:
+                        continue
 
             genre_overlap = 0
             if genres:
@@ -359,7 +365,7 @@ class MovieRecommender:
                 "genre":       ", ".join(movie_genres[:3]),
                 "country":     movie_countries[0] if movie_countries else "",
                 "language":    movie_language,
-                "description": str(row.get(COL_OVERVIEW, ""))[:500],
+                "description": str(row.get(COL_OVERVIEW, "")),
                 "tags":        movie_genres[:4],
                 "similarity":  round(sim * 100, 1),
                 "confidence":  confidence,
@@ -414,7 +420,7 @@ class MovieRecommender:
                 "year":        int(row.get("_year", 0)),
                 "score":       round(float(row.get("_rating", 0)), 1),
                 "genre":       ", ".join(row["_genres_list"][:4]),
-                "description": str(row.get(COL_OVERVIEW, ""))[:500],
+                "description": str(row.get(COL_OVERVIEW, "")),
                 "similarity":  round(sim * 100, 1),
                 "confidence":  "Similar movie"
             })
@@ -443,7 +449,7 @@ class MovieRecommender:
                 "genre":       ", ".join(genres[:3]),
                 "country":     row["_countries_list"][0] if row["_countries_list"] else "",
                 "language":    str(row.get("_language", "")),
-                "description": str(row.get(COL_OVERVIEW, ""))[:500],
+                "description": str(row.get(COL_OVERVIEW, "")),
                 "tags":        genres[:4],
                 "similarity":  round(float(similarities[idx]) * 100, 1),
                 "confidence":  "Broad match — filters relaxed",
